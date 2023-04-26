@@ -7,5 +7,20 @@
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
+    <orderEntry type="module-library" exported="">
+      <library name="googlecode.json.simple" type="repository">
+        <properties maven-id="com.googlecode.json-simple:json-simple:1.1.1" />
+        <CLASSES>
+          <root url="jar://$MODULE_DIR$/lib/json-simple-1.1.1.jar!/" />
+          <root url="jar://$MODULE_DIR$/lib/junit-4.10.jar!/" />
+          <root url="jar://$MODULE_DIR$/lib/hamcrest-core-1.1.jar!/" />
+        </CLASSES>
+        <JAVADOC />
+        <SOURCES />
+      </library>
+    </orderEntry>
+    <orderEntry type="library" name="jsoup" level="project" />
+    <orderEntry type="library" name="mongodb.mongo.java.driver" level="project" />
+    <orderEntry type="library" name="github.rholder.snowball.stemmer" level="project" />
   </component>
 </module>
