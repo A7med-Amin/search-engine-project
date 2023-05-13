@@ -4,6 +4,8 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Queue;
 import java.net.URL;
+
+import com.mongodb.client.model.UpdateOptions;
 import org.jsoup.*;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
@@ -12,7 +14,8 @@ import org.bson.Document;
 import com.mongodb.*;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.MongoCollection;
-
+import com.mongodb.client.model.Updates;
+import com.mongodb.client.model.UpdateOptions;
 import crawlercommons.filters.basic.BasicURLNormalizer;
 import java.io.*;
 import java.util.*;
@@ -25,6 +28,7 @@ public class Crawler implements Runnable {
     static Queue<String> toBeCrawledLinks = new LinkedList<String>();
     static Queue<String> crawledAlreadyLinks = new LinkedList<String>();
     static int numThreads = 8;
+    static int state=0;
     static int numThreadsFinished = 0;
     static Object lock = new Object();
 
@@ -33,12 +37,14 @@ public class Crawler implements Runnable {
         private MongoDatabase db;
         private MongoCollection<Document> toBeCrawled;
         private MongoCollection<Document> crawledAlreadyLinksDB;
+        private MongoCollection<Document> stateOfCrawler;
 
         public HandleMongoDB() {
             this.mongoClient = new MongoClient(new MongoClientURI("mongodb+srv://Ahmed:n5XPwrcZ3ELSDoJ3@cluster0.oykbykb.mongodb.net"));
             this.db = mongoClient.getDatabase("SampleDB");
             this.toBeCrawled = db.getCollection("toBeCrawled");
             this.crawledAlreadyLinksDB = db.getCollection("crawledAlreadyLinks");
+            this.stateOfCrawler = db.getCollection("stateOfCrawler");
         }
 
         public void fillSeedSet() {
@@ -90,11 +96,31 @@ public class Crawler implements Runnable {
                 BasicURLNormalizer normalizer = new BasicURLNormalizer();
                 String normalizedUrl = normalizer.filter(url);
                 if (url.contains("http") && !toBeCrawledLinks.contains(normalizedUrl)) {
+                    NoOfAddedPagesAlready++;
                     toBeCrawledLinks.add(normalizedUrl);
                     toBeCrawled.insertOne(new Document("url", normalizedUrl)
                             .append("name", name) .append("pageObjectId", pageObjectId));
                     System.out.println("WE JUST ADDED THIS TO THE TO BE CRAWLED LINKS"+url );
                 }
+            }
+        }
+
+        public void fillLists() {
+            //if we got interupted we gotta get what's in the db before we start
+            BasicURLNormalizer normalizer = new BasicURLNormalizer();
+            Iterator iterator = toBeCrawled.find().iterator();
+            while (iterator.hasNext()) {
+                Document document = (Document) iterator.next();
+                if(document.getString("url")!=null)
+                {
+                toBeCrawledLinks.add(normalizer.filter(document.getString("url")));}
+            }
+
+            iterator = crawledAlreadyLinksDB.find().iterator();
+            while (iterator.hasNext()) {
+                Document document = (Document) iterator.next();
+                crawledAlreadyLinks.add(normalizer.filter(document.getString("url")));
+                crawledAlreadyHashMap.put(normalizer.filter(document.getString("url")),1);
             }
         }
 
@@ -112,8 +138,34 @@ public class Crawler implements Runnable {
 
             return nextLink;
         }
+        public int getPagesAdded() {
+            Document query = new Document("_id", "crawler_state");
+            Document result = stateOfCrawler.find(query).first();
+            if (result != null) {
+                return result.getInteger("addedPages");
+            } else {
+                return 0;
+            }
+        }
+        public int getState() {
+            Document query = new Document("_id", "crawler_state");
+            Document result = stateOfCrawler.find(query).first();
+            if (result != null) {
+                return result.getInteger("state");
+            } else {
+                return 0;
+            }
+        }
+        public void setState(int state,int pagesAdded) {
+            System.out.println("NO OF ADDED "+pagesAdded);
+            Document query = new Document("_id", "crawler_state");
+            Document update = new Document("$set", new Document("state", state).append("addedPages", pagesAdded));
+            UpdateOptions options = new UpdateOptions().upsert(true);
+            stateOfCrawler.updateOne(query, update, options);
+        }
 
     }
+
 
     public void crawl() {
         HandleMongoDB mongoDBHandler = new HandleMongoDB();
@@ -144,12 +196,16 @@ public class Crawler implements Runnable {
                     String url = page.attr("abs:href");
                     String normalizedUrl = normalizer.filter(url);
 
-                    if (url.contains("http") && !crawledAlreadyHashMap.containsKey(normalizedUrl)) {
+                    if (url.contains("http") && !crawledAlreadyHashMap.containsKey(normalizedUrl)&&url!=null) {
                         if (NoOfAddedPagesAlready < NoOfCrawledPagesMax) {
                             mongoDBHandler.addToToBeCrawledLinks(url, websiteName,pageObjectId);
-                            NoOfAddedPagesAlready++;
-                            
+
+                            System.out.println(NoOfAddedPagesAlready);
                         }
+                        else{
+                            System.exit(1);
+                        }
+
                     }
                 }
 
@@ -160,7 +216,10 @@ public class Crawler implements Runnable {
     }
 
     public void run() {
+        HandleMongoDB mongoDBHandler = new HandleMongoDB();
+
         crawl();
+       // mongoDBHandler.setState(1,NoOfAddedPagesAlready);
         synchronized (lock) {
             numThreadsFinished++;
         }
@@ -168,7 +227,16 @@ public class Crawler implements Runnable {
 
     public static void main(String[] args) {
         HandleMongoDB mongoDBHandler = new HandleMongoDB();
-        mongoDBHandler.fillSeedSet();
+        int state = mongoDBHandler.getState();
+        NoOfAddedPagesAlready=mongoDBHandler.getPagesAdded();
+        if (state==0) {
+            System.out.println("WE ARE FILLING THE SEADSET DE AWEL RUN ASLAHA");
+            mongoDBHandler.fillSeedSet();
+        }
+        else{
+            System.out.println("WE ARE FILLING THE LISTS AFTER VEING INTERUPTED");
+            mongoDBHandler.fillLists();
+        }
 
         Thread[] threads = new Thread[numThreads];
         for (int i = 0; i < numThreads; i++) {
@@ -178,7 +246,14 @@ public class Crawler implements Runnable {
         for (int i = 0; i < numThreads; i++) {
             threads[i].start();
         }
-
+        // Register a function to be called when the program is terminated
+        Runtime.getRuntime().addShutdownHook(new Thread() {
+            @Override
+            public void run() {
+                // Save state or perform cleanup tasks here
+                mongoDBHandler.setState(1, NoOfAddedPagesAlready);
+            }
+        });
         for (int i = 0; i < numThreads; i++) {
             try {
                 threads[i].join();
@@ -186,7 +261,7 @@ public class Crawler implements Runnable {
                 e.printStackTrace();
             }
         }
-
+        //mongoDBHandler.setState(1);
         System.out.println("Done crawling!");
     }
 }
