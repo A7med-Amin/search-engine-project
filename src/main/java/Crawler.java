@@ -3,10 +3,7 @@ import java.net.URISyntaxException;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Queue;
-
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-
+import java.net.URL;
 import org.jsoup.*;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
@@ -15,28 +12,21 @@ import org.bson.Document;
 import com.mongodb.*;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.MongoCollection;
-import com.mongodb.client.model.Updates;
-import com.mongodb.client.result.DeleteResult;
 
 import crawlercommons.filters.basic.BasicURLNormalizer;
 import java.io.*;
 import java.util.*;
 
-
 public class Crawler implements Runnable {
-    // define a hash map for already crawled must not visit the same PAGE more than once "see compact string thing"
-    // define a seed set fill with awel 10 zewws
-    // crawl the 10 zewws, extracted hyperlinks added to the db
-    // define array for links to be crawler bl tarteeb
-    // handle the robo thing for security issues
-    // The crawler can only crawl documents of specific types (HTML is sufficient for the project).??
-    // The crawler must maintain its state so that it can, if interrupted, be started again to crawl the documents on the list without revisiting documents that have been previously downloaded.??
-    // 6000 max crawled links
 
-    static HashMap<String, Integer> crawledAlready = new HashMap<String, Integer>(); // hashmap to store crawled link to avoid redoing them when coming from db
-    static Integer NoOfCrawledPagesMax = 6000; // max no of to be crawled pages
-    static Integer NoOfCrawledPagesAlready = 0; // max no of to be crawled pages
-    static Queue<String> toBeCrawledLinks = new LinkedList<String>(); // array of to be crawled links FIFO
+    static HashMap<String, Integer> crawledAlreadyHashMap = new HashMap<String, Integer>();
+    static Integer NoOfCrawledPagesMax = 6000;
+    static Integer NoOfAddedPagesAlready = 0;
+    static Queue<String> toBeCrawledLinks = new LinkedList<String>();
+    static Queue<String> crawledAlreadyLinks = new LinkedList<String>();
+    static int numThreads = 8;
+    static int numThreadsFinished = 0;
+    static Object lock = new Object();
 
     static class HandleMongoDB {
         private MongoClient mongoClient;
@@ -59,11 +49,18 @@ public class Crawler implements Runnable {
 
                 while (myScannerReader.hasNextLine()) {
                     String urlData = myScannerReader.nextLine();
-                    if (urlData.contains("http") && !toBeCrawledLinks.contains(urlData)// for some reason links still get added more than once
 
-                    ) {
-                        addToToBeCrawledLinks(urlData);
-                        toBeCrawled.insertOne(new Document("url", normalizer.filter(urlData)));
+                    if (urlData.contains("http") && !toBeCrawledLinks.contains(normalizer.filter(urlData)) && urlData!=null) {
+                        try {
+                            org.jsoup.nodes.Document linkDoc = Jsoup.connect(urlData).get();
+                            String websiteName = linkDoc.title().split(" - ")[0];
+
+                            String ObjectID=getObjectIdForURL(urlData);
+                            addToToBeCrawledLinks(urlData,websiteName,ObjectID);
+                            toBeCrawled.insertOne(new Document("url", normalizer.filter(urlData)));
+                        } catch (IOException e) {
+                            // handle the exception
+                        }
                     }
                 }
 
@@ -74,85 +71,122 @@ public class Crawler implements Runnable {
             }
         }
 
-        public boolean hashed(String url) {
-            return true;
-        }
-
-        public void addToToBeCrawledLinks(String url) {
+        public String getObjectIdForURL(String url) {
+            MongoCollection<Document> collection = db.getCollection("crawledAlreadyLinks");
             BasicURLNormalizer normalizer = new BasicURLNormalizer();
             String normalizedUrl = normalizer.filter(url);
-            if (url.contains("http") && !toBeCrawledLinks.contains(normalizedUrl)) {
-                toBeCrawledLinks.add(normalizedUrl);
-                toBeCrawled.insertOne(new Document("url", normalizedUrl));
+            Document query = new Document("url", normalizedUrl);
+            Document result = collection.find(query).first();
+            if (result != null) {
+                String objectId = result.getObjectId("_id").toString();
+                return objectId;
+            } else {
+                return null;
             }
+        }
+        public void addToToBeCrawledLinks(String url, String name,String pageObjectId) {
+            if (url != null) {
 
+                BasicURLNormalizer normalizer = new BasicURLNormalizer();
+                String normalizedUrl = normalizer.filter(url);
+                if (url.contains("http") && !toBeCrawledLinks.contains(normalizedUrl)) {
+                    toBeCrawledLinks.add(normalizedUrl);
+                    toBeCrawled.insertOne(new Document("url", normalizedUrl)
+                            .append("name", name) .append("pageObjectId", pageObjectId));
+                    System.out.println("WE JUST ADDED THIS TO THE TO BE CRAWLED LINKS"+url );
+                }
+            }
         }
 
         public String getLinkForCrawling() {
-            String nextLink = toBeCrawledLinks.poll();
+            String nextLink ;
+
+            nextLink = toBeCrawledLinks.poll();
             if (nextLink != null) {
                 toBeCrawledLinks.remove(nextLink);
                 toBeCrawled.deleteOne(new Document("url", nextLink));
                 crawledAlreadyLinksDB.insertOne(new Document("url", nextLink));
-                return nextLink;
-            } else {
-                // the queue is empty
-                return null;
+                crawledAlreadyLinks.add(nextLink);
+                System.out.println("WE JUST CAPTURED THIS FOR CRAWLING"+nextLink );
             }
+
+            return nextLink;
         }
 
     }
 
     public void crawl() {
-
-        // check fi we reached the max for crawling
         HandleMongoDB mongoDBHandler = new HandleMongoDB();
-        while (NoOfCrawledPagesAlready < NoOfCrawledPagesMax && !toBeCrawledLinks.isEmpty()) {
-            String URL = mongoDBHandler.getLinkForCrawling();
-            System.out.println("the link we curretnly crawling" + URL);
-            if (URL != null) {
-                try {
-                    org.jsoup.nodes.Document doc = Jsoup.connect(URL).get();
-                    Elements links = doc.select("a[href]");
-                    for (Element link : links) {
-                        String href = link.attr("href");
-                        if (!toBeCrawledLinks.contains(href)) {
-                            mongoDBHandler.addToToBeCrawledLinks(href);
+        BasicURLNormalizer normalizer = new BasicURLNormalizer();
+        while (true) {
+            String URL;
+            synchronized (lock) {
+                URL = mongoDBHandler.getLinkForCrawling();
+
+                if (URL == null) {
+                    // no more links to crawl
+                    return;
+                }
+                crawledAlreadyHashMap.put(URL, 1);
+            }
+
+            try {
+                String pageObjectId = mongoDBHandler.getObjectIdForURL(URL);
+                org.jsoup.nodes.Document linkDoc = Jsoup.connect(URL).get();
+
+                String websiteName = linkDoc.title().split(" - ")[0];
+
+                Elements linksOnPage = linkDoc.select("a[href]");
+
+                // process links on the page
+                for (Element page : linksOnPage) {
+
+                    String url = page.attr("abs:href");
+                    String normalizedUrl = normalizer.filter(url);
+
+                    if (url.contains("http") && !crawledAlreadyHashMap.containsKey(normalizedUrl)) {
+                        if (NoOfAddedPagesAlready < NoOfCrawledPagesMax) {
+                            mongoDBHandler.addToToBeCrawledLinks(url, websiteName,pageObjectId);
+                            NoOfAddedPagesAlready++;
+                            
                         }
                     }
-                    NoOfCrawledPagesAlready++;
-                    System.out.println("NO OF CRALWED"+NoOfCrawledPagesAlready);
-                } catch (IOException e) {
-                    // handle the exception
                 }
+
+            } catch (IOException e) {
+                // handle the exception
             }
         }
     }
 
-    public static void main(String[] args) throws URISyntaxException, IOException {
-        // maintain threading 3lshan n5ls crawling bsor3a
+    public void run() {
+        crawl();
+        synchronized (lock) {
+            numThreadsFinished++;
+        }
+    }
+
+    public static void main(String[] args) {
         HandleMongoDB mongoDBHandler = new HandleMongoDB();
         mongoDBHandler.fillSeedSet();
 
-        int numThreads = 4; // default number of threads
-        if (args.length > 0) {
-            numThreads = Integer.parseInt(args[0]);
+        Thread[] threads = new Thread[numThreads];
+        for (int i = 0; i < numThreads; i++) {
+            threads[i] = new Thread(new Crawler());
         }
-
-        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
 
         for (int i = 0; i < numThreads; i++) {
-            executor.execute(new Crawler());
+            threads[i].start();
         }
 
-        executor.shutdown();
-        while (!executor.isTerminated()) {
+        for (int i = 0; i < numThreads; i++) {
+            try {
+                threads[i].join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
         }
-        System.out.println("Finished all threads");
-    }
 
-    @Override
-    public void run() {
-        crawl();
+        System.out.println("Done crawling!");
     }
 }
