@@ -193,7 +193,7 @@ public class Crawler implements Runnable {
                     System.out.println("WE JUST FOUND A ROBOTTXT THAT FORBIDS");
                     continue;
                 }
-                System.out.println("no robottxt forbidding");
+                System.out.println("no robottxt forbidding NOW WE CRAWLING"+URL);
                 org.jsoup.nodes.Document linkDoc = Jsoup.connect(URL).get();
 
                 String websiteName = linkDoc.title().split(" - ")[0];
