@@ -5,6 +5,10 @@ import java.util.LinkedList;
 import java.util.Queue;
 import java.net.URL;
 
+
+
+import crawlercommons.robots.BaseRobotRules;
+import crawlercommons.robots.SimpleRobotRulesParser;
 import com.mongodb.client.model.UpdateOptions;
 import org.jsoup.*;
 import org.jsoup.nodes.Element;
@@ -184,6 +188,12 @@ public class Crawler implements Runnable {
 
             try {
                 String pageObjectId = mongoDBHandler.getObjectIdForURL(URL);
+                // check if URL is allowed by robots.txt
+                if (!isUrlAllowedByRobots(URL)) {
+                    System.out.println("WE JUST FOUND A ROBOTTXT THAT FORBIDS");
+                    continue;
+                }
+                System.out.println("no robottxt forbidding");
                 org.jsoup.nodes.Document linkDoc = Jsoup.connect(URL).get();
 
                 String websiteName = linkDoc.title().split(" - ")[0];
@@ -209,12 +219,45 @@ public class Crawler implements Runnable {
                     }
                 }
 
-            } catch (IOException e) {
+            } catch (IOException | URISyntaxException e) {
                 // handle the exception
             }
         }
     }
 
+    private static boolean isUrlAllowedByRobots(String url) throws IOException, URISyntaxException {
+        // Extract the protocol, host, and port from the URL
+        URL urlObj = new URL(url);
+        String hostId = urlObj.getProtocol() + "://" + urlObj.getHost() + (urlObj.getPort() != -1 ? ":" + urlObj.getPort() : "");
+
+        // Construct the URL for the robots.txt file for the website
+        String robotsUrl = hostId + "/robots.txt";
+
+        // Download the robots.txt file if it's not directly accessible through a URL
+        String robotsTxtContent;
+        if (urlObj.openConnection().getHeaderField("Content-Type").equals("text/plain")) {
+            robotsTxtContent = Jsoup.connect(robotsUrl).get().toString();
+        } else {
+            URL robotsTxtUrl = new URL(hostId + "/robots.txt");
+            BufferedReader in = new BufferedReader(new InputStreamReader(robotsTxtUrl.openStream()));
+            StringBuilder content = new StringBuilder();
+            String inputLine;
+            while ((inputLine = in.readLine()) != null) {
+                content.append(inputLine);
+                content.append("\n");
+            }
+            in.close();
+            robotsTxtContent = content.toString();
+        }
+
+        // Parse the contents of the robots.txt file and return the rules for the current user agent
+        BaseRobotRules rules;
+        SimpleRobotRulesParser robotParser = new SimpleRobotRulesParser();
+        rules = robotParser.parseContent(robotsUrl, robotsTxtContent.getBytes(), "text/plain", "mycrawler");
+
+        // Check if the input URL is allowed to be crawled based on the rules specified in the robots.txt file
+        return rules.isAllowed(url);
+    }
     public void run() {
         HandleMongoDB mongoDBHandler = new HandleMongoDB();
 
@@ -234,7 +277,7 @@ public class Crawler implements Runnable {
             mongoDBHandler.fillSeedSet();
         }
         else{
-            System.out.println("WE ARE FILLING THE LISTS AFTER VEING INTERUPTED");
+            System.out.println("WE ARE FILLING THE LISTS AFTER BEING INTERUPTED");
             mongoDBHandler.fillLists();
         }
 
@@ -264,4 +307,9 @@ public class Crawler implements Runnable {
         //mongoDBHandler.setState(1);
         System.out.println("Done crawling!");
     }
+
+
+
 }
+
+
