@@ -1,3 +1,5 @@
+//package main.java;
+
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.util.HashMap;
@@ -14,15 +16,14 @@ import org.bson.conversions.Bson;
 
 import org.tartarus.snowball.ext.porterStemmer;
 
-import com.mongodb.*;
-import com.mongodb.client.model.UpdateOptions;
-import com.mongodb.client.MongoDatabase;
-import com.mongodb.client.MongoClient;
-import com.mongodb.client.MongoClients;
-import com.mongodb.client.MongoCollection;
-import com.mongodb.client.model.Filters;
-import com.mongodb.client.model.Updates;
-import com.mongodb.client.model.UpdateOptions;
+//import com.mongodb.*;
+//import com.mongodb.client.model.UpdateOptions;
+//import com.mongodb.client.MongoDatabase;
+//import com.mongodb.client.MongoClients;
+//import com.mongodb.client.MongoCollection;
+//import com.mongodb.client.model.Filters;
+//import com.mongodb.client.model.Updates;
+//import com.mongodb.client.model.UpdateOptions;
 
 import java.io.*;
 import java.util.*;
@@ -34,72 +35,156 @@ public class Indexer {
 ////////////                               Variables                                                     ////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    // Array that has all doc links read from crawler DB
-    public static List<Document> docs = new ArrayList<>();
+    // Links & Ids of docs that is crawled already and saved in DB
+    static List<Document> toBeCrawledDocs = new ArrayList<>();
     // List of stop words to be excluded from indexer DB
     public static List<String> stopWords;
-    // HashMap that contains entry to DB
-    public static HashMap<String, Word> dbEntry = new HashMap();
     // List of actual Elements that has no child in tags
     public static List<Element> actualElements;
     // List of all words exists in 1 document
-    public static List<String> words;
-
+//    public static List<String> words;
+    // HashMap that contains entry to DB
+    public static HashMap<String, Word> dbEntry = new HashMap();
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////                            Helper functions                                                 ////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    public static List<String> splitToWords(String line)
-    {
+    public static List<String> splitToWords(String elemntString) {
         List<String> Words = new ArrayList<String>();
         Pattern pattern = Pattern.compile("\\w+");
-        Matcher match = pattern.matcher(line);
-        while (match.find())
-        {
+        Matcher match = pattern.matcher(elemntString);
+        while (match.find()) {
             String word = match.group();
-            if(!word.matches("[0-9]+") && word.length() <= 20)
-            {
-                words.add(word);
+            if (!word.matches("[0-9]+") && word.length() <= 20) {
+                Words.add(word);
             }
         }
-        return words;
+        return Words;
     }
 
-    public static void readStopWordsFromFile() throws IOException
-    {
+    public static void readStopWordsFromFile() throws IOException {
         String line = null;
         BufferedReader reader = new BufferedReader(new FileReader("stopWords.txt"));
         stopWords = new ArrayList<String>();
-        while((line = reader.readLine()) != null)
-        {
+        while ((line = reader.readLine()) != null) {
             stopWords.add(line);
         }
         reader.close();
     }
 
-    public static void excludeStopWords ()
-    {
-        words.removeAll(stopWords);
+    public static void excludeStopWords(List<String> listWithStopWords) {
+        listWithStopWords.removeAll(stopWords);
     }
 
     // Function that loops on all words retrieved from the document and stem these words to its root
-    public static void stemWords()
-    {
+    public static void stemWords(List<String> listOfWordsToSteam) {
         porterStemmer stemmer = new porterStemmer();
-        for(int i = 0 ; i < words.size() ; i++)
-        {
-            stemmer.setCurrent(words.get(i));
+        for (int i = 0; i < listOfWordsToSteam.size(); i++) {
+            stemmer.setCurrent(listOfWordsToSteam.get(i));
             stemmer.stem();
-            words.set(i,stemmer.getCurrent());
+            listOfWordsToSteam.set(i, stemmer.getCurrent());
         }
     }
 
+    // Function get all elements in html document then exclude elements with children
+    public static void getElementsWithoutChildren(org.jsoup.nodes.Document document) {
+        actualElements = new ArrayList<Element>();
+        // Get all elements <tags> in doc
+        Elements elements = document.select("*");
+        // Remove elements that contain children
+        for (Element element : elements) {
+            if (element.children().isEmpty()) {
+                // add only tags that has text in it and ignore empty tags
+                if (!element.text().isEmpty()) {
+                    actualElements.add(element);
+                }
+            }
+        }
+    }
+
+    // Function that get all words in a doc
+    public static void getDocWords(List<String> words) {
+//        words = new ArrayList<String>();
+        for (Element element : actualElements) {
+            // Get element text as string
+            String elementStr = element.text();
+            // Get all words in the doc (including stop words)
+            // Convert words into lowercase to match stop words
+            List<String> allDocWords = splitToWords(elementStr.toLowerCase());
+            // Remove stop words
+            excludeStopWords(allDocWords);
+            // Stem remaining words
+            stemWords(allDocWords);
+
+            // Add these fine words now to list of words
+            for (String str : allDocWords) {
+                //convert it to lower case
+                words.add(str);
+            }
+        }
+    }
+
+    // Function to Read Crawled links from mongoDB toBeCrawled collection and save it in List<Document>
+    public static void readCrawledLinks() {
+        HandleMongoDB mongoDBHandler = new HandleMongoDB();
+        mongoDBHandler.getCrawledDocs(toBeCrawledDocs);
+    }
+
+    // Insert doc words into hash map
+    public static void insertWordsToHashMap() {
+        // Loop on words of the document
+
+    }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-////////////                          Super loop of indexer                                              ////////////
+////////////                                 Main Function                                               ////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+    public static void main(String[] args) throws IOException {
 
+        // Read stop words from file containing all stop words and save it in an array
+        readStopWordsFromFile();
+
+        // Get all crawled docs data {id & url} form mongoDB and save it in list of docs
+        readCrawledLinks();
+
+        // Loop on all docs in list of docs that is already crawled and index words in each doc
+        for (int i = 0; i < toBeCrawledDocs.size(); i++) {
+
+            System.out.println(i);
+            System.out.println(toBeCrawledDocs.get(i).getObjectId("_id").toString());
+            System.out.println(toBeCrawledDocs.get(i).getString("url"));
+
+            // List contains all words of a document
+            List<String> words = new ArrayList<String>();
+
+            // Get the document html elements
+            org.jsoup.nodes.Document document;
+            try {
+                document = Jsoup.connect(toBeCrawledDocs.get(i).getString("url").toString()).get();
+                // Get actual elements that have no children
+                getElementsWithoutChildren(document);
+                // Get doc words after remove stop words / stemming / convert to lower-case
+                getDocWords(words);
+                // Get data to be added to hash map
+
+
+            } catch (IOException e) {
+                e.printStackTrace();
+                System.out.println("This link Fails");
+            }
+
+
+            //Get number of words in a document
+            //Get words in doc
+//            String htmlText = document.body().text();
+//            String[] htmlWords = htmlText.split("\\s+");
+//            System.out.println(htmlWords.length);
+//            System.out.println(toBeCrawledDocs.get(i).getString("url").toString());
+            ///////////////////////////////////////////////////////////////////////////
+
+        }
+    }
 
 }

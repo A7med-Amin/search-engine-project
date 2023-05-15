@@ -5,5 +5,5 @@ public class Doc {
     int docLength;
     int tf;
     List<Integer> positions = new ArrayList<>();
-    String firstOccurance;
+    String firstOccurrence;
 }
