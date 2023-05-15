@@ -67,7 +67,7 @@ public class Crawler implements Runnable {
 
                             String ObjectID=getObjectIdForURL(urlData);
                             addToToBeCrawledLinks(urlData,websiteName,ObjectID);
-                            toBeCrawled.insertOne(new Document("url", normalizer.filter(urlData)));
+
                         } catch (IOException e) {
                             // handle the exception
                         }
@@ -94,17 +94,20 @@ public class Crawler implements Runnable {
                 return null;
             }
         }
-        public void addToToBeCrawledLinks(String url, String name,String pageObjectId) {
+        public void addToToBeCrawledLinks(String url, String name, String pageObjectId) {
             if (url != null) {
-
                 BasicURLNormalizer normalizer = new BasicURLNormalizer();
                 String normalizedUrl = normalizer.filter(url);
+
+                // Remove "www." if it exists in the URL
+                normalizedUrl = normalizedUrl.replaceFirst("www.", "");
+
                 if (url.contains("http") && !toBeCrawledLinks.contains(normalizedUrl)) {
                     NoOfAddedPagesAlready++;
                     toBeCrawledLinks.add(normalizedUrl);
                     toBeCrawled.insertOne(new Document("url", normalizedUrl)
-                            .append("name", name) .append("pageObjectId", pageObjectId));
-                    System.out.println("WE JUST ADDED THIS TO THE TO BE CRAWLED LINKS"+url );
+                            .append("name", name).append("pageObjectId", pageObjectId));
+                    System.out.println("WE JUST ADDED THIS TO THE TO BE CRAWLED LINKS" + normalizedUrl);
                 }
             }
         }
@@ -235,7 +238,8 @@ public class Crawler implements Runnable {
 
         // Download the robots.txt file if it's not directly accessible through a URL
         String robotsTxtContent;
-        if (urlObj.openConnection().getHeaderField("Content-Type").equals("text/plain")) {
+        String contentType = urlObj.openConnection().getHeaderField("Content-Type");
+        if (contentType != null && contentType.equals("text/plain")) {
             robotsTxtContent = Jsoup.connect(robotsUrl).get().toString();
         } else {
             URL robotsTxtUrl = new URL(hostId + "/robots.txt");
