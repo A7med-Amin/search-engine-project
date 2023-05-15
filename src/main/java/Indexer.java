@@ -131,7 +131,7 @@ public class Indexer {
     public static void readCrawledLinks() {
         HandleMongoDB mongoDBHandler = new HandleMongoDB();
         mongoDBHandler.getCrawledDocs(toBeCrawledDocs);
-//        String id = toBeCrawledDocs.get(0).getObjectId("_id").toString();
+        String id = toBeCrawledDocs.get(0).getObjectId("_id").toString();
     }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
