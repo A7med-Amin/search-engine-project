@@ -1,10 +1,13 @@
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Queue;
 import java.net.URL;
 
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 
 
 import crawlercommons.robots.BaseRobotRules;
@@ -27,6 +30,7 @@ import java.util.*;
 public class Crawler implements Runnable {
 
     static HashMap<String, Integer> crawledAlreadyHashMap = new HashMap<String, Integer>();
+    static Set<String> visitedPages = new HashSet<>();
     static Integer NoOfCrawledPagesMax = 6000;
     static Integer NoOfAddedPagesAlready = 0;
     static Queue<String> toBeCrawledLinks = new LinkedList<String>();
@@ -42,6 +46,7 @@ public class Crawler implements Runnable {
         private MongoCollection<Document> toBeCrawled;
         private MongoCollection<Document> crawledAlreadyLinksDB;
         private MongoCollection<Document> stateOfCrawler;
+        private MongoCollection<Document> compactStrings;
 
         public HandleMongoDB() {
             this.mongoClient = new MongoClient(new MongoClientURI("mongodb+srv://Ahmed:n5XPwrcZ3ELSDoJ3@cluster0.oykbykb.mongodb.net"));
@@ -49,6 +54,7 @@ public class Crawler implements Runnable {
             this.toBeCrawled = db.getCollection("toBeCrawled");
             this.crawledAlreadyLinksDB = db.getCollection("crawledAlreadyLinks");
             this.stateOfCrawler = db.getCollection("stateOfCrawler");
+            this.compactStrings = db.getCollection("compactStrings");
         }
 
         public void fillSeedSet() {
@@ -94,7 +100,42 @@ public class Crawler implements Runnable {
                 return null;
             }
         }
-        public void addToToBeCrawledLinks(String url, String name, String pageObjectId) {
+        private String getPageContent(String url) {
+            try {
+                Connection connection = Jsoup.connect(url);
+                org.jsoup.nodes.Document document = connection.get();
+                return document.toString();
+            } catch (HttpStatusException e) {
+                if (e.getStatusCode() == 403) {
+                    System.out.println("Access to page content denied: " + url);
+                } else if (e.getStatusCode() == 404) {
+                    System.out.println("Page not found: " + url);
+                } else {
+                    System.out.println("HTTP error fetching URL. Status=" + e.getStatusCode() + ", URL=" + url);
+                }
+                return null;
+            } catch (IOException e) {
+                System.out.println("Failed to retrieve page content: " + url);
+                return null;
+            }
+        }
+
+        public String generateCompactString(String pageContent) {
+            try {
+                MessageDigest messageDigest = MessageDigest.getInstance("MD5");
+                byte[] hash = messageDigest.digest(pageContent.getBytes(StandardCharsets.UTF_8));
+
+                StringBuilder sb = new StringBuilder();
+                for (byte b : hash) {
+                    sb.append(String.format("%02x", b));
+                }
+                return sb.toString();
+
+            } catch (NoSuchAlgorithmException e) {
+                throw new RuntimeException("Failed to generate compact string", e);
+            }
+        }
+        public void addToToBeCrawledLinks(String url, String name, String pageObjectId) throws IOException {
             if (url != null) {
                 BasicURLNormalizer normalizer = new BasicURLNormalizer();
                 String normalizedUrl = normalizer.filter(url);
@@ -103,14 +144,33 @@ public class Crawler implements Runnable {
                 normalizedUrl = normalizedUrl.replaceFirst("www.", "");
 
                 if (url.contains("http") && !toBeCrawledLinks.contains(normalizedUrl)) {
+                    // Generate compact string from page content
+                    String pageContent = null;
+                    pageContent = getPageContent(url);
+                    if(pageContent==null)
+                    {
+                        return;
+                    }
+                    String compactString = generateCompactString(pageContent);
+
+                    // Check if compact string is already in hashset
+                    if (visitedPages.contains(compactString)) {
+                        System.out.println("Page already visited: " + normalizedUrl);
+                        return;
+                    }
+
+                    // Add normalized URL and compact string to to-be-crawled and visited hashsets
                     NoOfAddedPagesAlready++;
                     toBeCrawledLinks.add(normalizedUrl);
                     toBeCrawled.insertOne(new Document("url", normalizedUrl)
                             .append("name", name).append("pageObjectId", pageObjectId));
+                    visitedPages.add(compactString);
+                    compactStrings.insertOne(new Document("url", normalizedUrl).append("compactString", compactString));
                     System.out.println("WE JUST ADDED THIS TO THE TO BE CRAWLED LINKS" + normalizedUrl);
                 }
             }
         }
+
 
         public void fillLists() {
             //if we got interupted we gotta get what's in the db before we start
@@ -128,6 +188,12 @@ public class Crawler implements Runnable {
                 Document document = (Document) iterator.next();
                 crawledAlreadyLinks.add(normalizer.filter(document.getString("url")));
                 crawledAlreadyHashMap.put(normalizer.filter(document.getString("url")),1);
+            }
+            iterator = compactStrings.find().iterator();
+            while (iterator.hasNext()) {
+                Document document = (Document) iterator.next();
+                String compactString = document.getString("compactString");
+                visitedPages.add(compactString);
             }
         }
 
