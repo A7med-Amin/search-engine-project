@@ -11,12 +11,14 @@ public class HandleMongoDB {
     private MongoDatabase db;
     private MongoCollection<Document> toBeCrawled;
     private MongoCollection<Document> wordsIndices;
+    private MongoCollection<Document> searchQuery;
 
     public HandleMongoDB() {
         this.mongoClient = new MongoClient(new MongoClientURI("mongodb+srv://Ahmed:n5XPwrcZ3ELSDoJ3@cluster0.oykbykb.mongodb.net"));
         this.db = mongoClient.getDatabase("SampleDB");
         this.toBeCrawled = db.getCollection("toBeCrawled");
         this.wordsIndices = db.getCollection("wordsIndices");
+        this.searchQuery = db.getCollection("searchQuery");
     }
 
     // Get Crawled documents from DB
@@ -28,7 +30,7 @@ public class HandleMongoDB {
     // Add documents of words into DB
     public void insertWordsIntoDb(Document doc)
     {
+
         wordsIndices.insertOne(doc);
     }
-
 }

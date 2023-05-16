@@ -40,16 +40,16 @@ public class Indexer {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     public static List<String> splitToWords(String elemntString) {
-        List<String> Words = new ArrayList<>();
+        List<String> words = new ArrayList<>();
         Pattern pattern = Pattern.compile("\\w+");
         Matcher match = pattern.matcher(elemntString);
         while (match.find()) {
             String word = match.group();
             if (!word.matches("[0-9]+") && word.length() <= 20) {
-                Words.add(word);
+                words.add(word);
             }
         }
-        return Words;
+        return words;
     }
 
     public static void readStopWordsFromFile() throws IOException {
@@ -108,7 +108,6 @@ public class Indexer {
 
             // Add these fine words now to list of words
             for (String str : allDocWords) {
-                //convert it to lower case
                 words.put(str, elementStr);
             }
         }
@@ -136,6 +135,7 @@ public class Indexer {
 
                 // insert to Doc class
                 wordDocs.docId = doc.getObjectId("_id").toString();
+                wordDocs.docLink = doc.getString("url");
                 wordDocs.docLength = words.size();
                 ++wordDocs.tf;
                 wordDocs.positions.add(i);
@@ -160,12 +160,13 @@ public class Indexer {
                         break;
                     }
                 }
-                // Word is in DB but with
+                // Word is in DB but in different docs
                 if (!urlFound) {
                     Doc wordDocs = new Doc();
                     ++wordInDoc.df;
                     ++wordDocs.tf;
                     wordDocs.docId = doc.getObjectId("_id").toString();
+                    wordDocs.docLink = doc.getString("url");
                     wordDocs.docLength = words.size();
                     wordDocs.positions.add(i);
                     wordDocs.firstOccurrence = x.getValue();
@@ -182,16 +183,15 @@ public class Indexer {
     public static void convertMapToDoc() {
         for (Map.Entry<String, Word> dbEntry : dbEntries.entrySet()) {
             Word word = dbEntry.getValue();
-            List<Doc> wordDocs;
-            wordDocs = word.wordDocs;
             Document entryDoc = new Document();
             entryDoc.put("word", word.word);
             entryDoc.put("df", word.df);
             entryDoc.put("documents", new ArrayList<>());
 
-            for (Doc docs : wordDocs) {
+            for (Doc docs : word.wordDocs) {
                 Document docsListData = new Document();
                 docsListData.put("doc_id", docs.docId);
+                docsListData.put("doc_link", docs.docLink);
                 docsListData.put("doc_length", docs.docLength);
                 docsListData.put("tf", docs.tf);
                 docsListData.put("first_occurrence", docs.firstOccurrence);
@@ -252,7 +252,9 @@ public class Indexer {
                 {
                     mongoDBHandler.insertWordsIntoDb(doc);
                 }
-
+                // Clear data after finishing a document
+                actualElements.clear();
+                dbDocuments.clear();
             } catch (IOException e) {
                 e.printStackTrace();
                 System.out.println("This link Fails");
