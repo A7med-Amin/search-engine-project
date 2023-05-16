@@ -173,7 +173,11 @@ public class Crawler implements Runnable {
                     NoOfAddedPagesAlready++;
                     toBeCrawledLinks.add(normalizedUrl);
                     toBeCrawled.insertOne(new Document("url", normalizedUrl)
-                            .append("name", name).append("includedLinks", 0) .append("parentPages",  Arrays.asList(pageObjectId)).append("pop", 1/6000));
+                            .append("name", name)
+                            .append("includedLinks", 0)
+                            .append("id", compactString)
+                            .append("parentPages", Arrays.asList(pageObjectId))
+                            .append("pop", 1.0f/6000));
                     visitedPages.add(compactString);
                     compactStrings.insertOne(new Document("url", normalizedUrl).append("compactString", compactString));
                     System.out.println("WE JUST ADDED THIS TO THE TO BE CRAWLED LINKS" + normalizedUrl);
@@ -267,6 +271,14 @@ public class Crawler implements Runnable {
 
             try {
                 String pageObjectId = mongoDBHandler.getObjectIdForURL(URL);
+                // Generate compact string from page content
+                String pageContent = null;
+                pageContent = mongoDBHandler.getPageContent(URL);
+                if(pageContent==null)
+                {
+                    return;
+                }
+                String compactString =mongoDBHandler.generateCompactString(pageContent);
                 // check if URL is allowed by robots.txt
                 if (!isUrlAllowedByRobots(URL)) {
                     System.out.println("WE JUST FOUND A ROBOTTXT THAT FORBIDS");
@@ -290,7 +302,7 @@ public class Crawler implements Runnable {
 
                     if (url.contains("http") &&url!=null) {
                         if (NoOfAddedPagesAlready < NoOfCrawledPagesMax) {
-                            mongoDBHandler.addToToBeCrawledLinks(url, websiteName,pageObjectId);
+                            mongoDBHandler.addToToBeCrawledLinks(url, websiteName,compactString);
 
                             System.out.println(NoOfAddedPagesAlready);
                         }
