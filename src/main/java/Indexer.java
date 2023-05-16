@@ -53,7 +53,7 @@ public class Indexer {
     }
 
     public static void readStopWordsFromFile() throws IOException {
-        String line ;
+        String line;
         BufferedReader reader = new BufferedReader(new FileReader("stopWords.txt"));
         stopWords = new ArrayList<>();
         while ((line = reader.readLine()) != null) {
@@ -247,19 +247,18 @@ public class Indexer {
                 insertWordsToHashMap(words, toBeCrawledDocs.get(i));
                 // Convert the hashmap into Document
                 convertMapToDoc();
-                // Insert to DB
-                for(Document doc: dbDocuments)
-                {
-                    mongoDBHandler.insertWordsIntoDb(doc);
-                }
                 // Clear data after finishing a document
-                actualElements.clear();
-                dbDocuments.clear();
+                if (i != 4) {
+                    actualElements.clear();
+                    dbDocuments.clear();
+                }
             } catch (IOException e) {
                 e.printStackTrace();
                 System.out.println("This link Fails");
             }
         }
+        // Insert to DB
+        mongoDBHandler.insertWordsIntoDb(dbDocuments);
     }
 
 }
