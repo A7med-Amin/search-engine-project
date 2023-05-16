@@ -173,7 +173,7 @@ public class Crawler implements Runnable {
                     NoOfAddedPagesAlready++;
                     toBeCrawledLinks.add(normalizedUrl);
                     toBeCrawled.insertOne(new Document("url", normalizedUrl)
-                            .append("name", name).append("includedLinks", 0) .append("parentPages",  Arrays.asList(pageObjectId)));
+                            .append("name", name).append("includedLinks", 0) .append("parentPages",  Arrays.asList(pageObjectId)).append("pop", 1/6000));
                     visitedPages.add(compactString);
                     compactStrings.insertOne(new Document("url", normalizedUrl).append("compactString", compactString));
                     System.out.println("WE JUST ADDED THIS TO THE TO BE CRAWLED LINKS" + normalizedUrl);
@@ -188,9 +188,9 @@ public class Crawler implements Runnable {
             Iterator iterator = toBeCrawled.find().iterator();
             while (iterator.hasNext()) {
                 Document document = (Document) iterator.next();
-                if(document.getString("url")!=null)
-                {
-                    toBeCrawledLinks.add(normalizer.filter(document.getString("url")));}
+                if (document.getString("url") != null && document.getInteger("includedLinks") == 0) {
+                    toBeCrawledLinks.add(normalizer.filter(document.getString("url")));
+                }
             }
 
             iterator = crawledAlreadyLinksDB.find().iterator();
@@ -278,18 +278,13 @@ public class Crawler implements Runnable {
                 String websiteName = linkDoc.title().split(" - ")[0];
 
                 Elements linksOnPage = linkDoc.select("a[href]");
-
+                int numLinks = linksOnPage.size();
+                System.out.println("NO OF LINKS IN THIS PAGE"+numLinks);
                 // process links on the page
-                Document toBeCrawledDoc = mongoDBHandler.toBeCrawled.find(new Document("url", URL)).first();
-
-                int linkCount = toBeCrawledDoc.getInteger("includedLinks", 0);
+                mongoDBHandler.toBeCrawled.updateOne(new Document("url", URL), new Document("$set", new Document("includedLinks", numLinks)));
 
                 for (Element page : linksOnPage) {
 
-                    synchronized (lock) {
-                        linkCount++;
-                        mongoDBHandler.toBeCrawled.updateOne(new Document("url", URL), new Document("$set", new Document("includedLinks", linkCount)));
-                    }
                     String url = page.attr("abs:href");
 
 
@@ -318,32 +313,38 @@ public class Crawler implements Runnable {
 
         // Construct the URL for the robots.txt file for the website
         String robotsUrl = hostId + "/robots.txt";
-
-        // Download the robots.txt file if it's not directly accessible through a URL
-        String robotsTxtContent;
-        String contentType = urlObj.openConnection().getHeaderField("Content-Type");
-        if (contentType != null && contentType.equals("text/plain")) {
-            robotsTxtContent = Jsoup.connect(robotsUrl).get().toString();
-        } else {
-            URL robotsTxtUrl = new URL(hostId + "/robots.txt");
-            BufferedReader in = new BufferedReader(new InputStreamReader(robotsTxtUrl.openStream()));
-            StringBuilder content = new StringBuilder();
-            String inputLine;
-            while ((inputLine = in.readLine()) != null) {
-                content.append(inputLine);
-                content.append("\n");
-            }
-            in.close();
-            robotsTxtContent = content.toString();
+try {
+    // Download the robots.txt file if it's not directly accessible through a URL
+    String robotsTxtContent;
+    String contentType = urlObj.openConnection().getHeaderField("Content-Type");
+    if (contentType != null && contentType.equals("text/plain")) {
+        robotsTxtContent = Jsoup.connect(robotsUrl).get().toString();
+    } else {
+        URL robotsTxtUrl = new URL(hostId + "/robots.txt");
+        BufferedReader in = new BufferedReader(new InputStreamReader(robotsTxtUrl.openStream()));
+        StringBuilder content = new StringBuilder();
+        String inputLine;
+        while ((inputLine = in.readLine()) != null) {
+            content.append(inputLine);
+            content.append("\n");
         }
-
-        // Parse the contents of the robots.txt file and return the rules for the current user agent
+        in.close();
+        robotsTxtContent = content.toString();
         BaseRobotRules rules;
         SimpleRobotRulesParser robotParser = new SimpleRobotRulesParser();
         rules = robotParser.parseContent(robotsUrl, robotsTxtContent.getBytes(), "text/plain", "mycrawler");
 
         // Check if the input URL is allowed to be crawled based on the rules specified in the robots.txt file
         return rules.isAllowed(url);
+    }
+}catch (FileNotFoundException e) {
+    // handle the FileNotFoundException, for example:
+
+    return true;    // assume all URLs are allowed if the robots.txt cannot be found
+}
+        return true;
+        // Parse the contents of the robots.txt file and return the rules for the current user agent
+
     }
     public void run() {
 
