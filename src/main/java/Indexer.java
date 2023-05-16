@@ -1,4 +1,4 @@
-//package main.java;
+/*//package main.java;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -261,4 +261,4 @@ public class Indexer {
         mongoDBHandler.insertWordsIntoDb(dbDocuments);
     }
 
-}
+}*/
