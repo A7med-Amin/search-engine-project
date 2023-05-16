@@ -142,8 +142,18 @@ public class Crawler implements Runnable {
 
                 // Remove "www." if it exists in the URL
                 normalizedUrl = normalizedUrl.replaceFirst("www.", "");
-
-                if (url.contains("http") && !toBeCrawledLinks.contains(normalizedUrl)) {
+                if (toBeCrawledLinks.contains(normalizedUrl)) {
+                    // Update the existing document to add the pageObjectId to the parentPages array
+                    Document toBeCrawledDoc = toBeCrawled.find(new Document("url", normalizedUrl)).first();
+                    List<String> parentPages = toBeCrawledDoc.getList("parentPages", String.class);
+                    if (!parentPages.contains(pageObjectId)) {
+                        synchronized (lock) {
+                            toBeCrawled.updateOne(new Document("url", normalizedUrl), new Document("$push", new Document("parentPages", pageObjectId)));
+                        }
+                    }
+                    return;
+                }
+                if (url.contains("http") && !toBeCrawledLinks.contains(normalizedUrl)&& !crawledAlreadyHashMap.containsKey(normalizedUrl)) {
                     // Generate compact string from page content
                     String pageContent = null;
                     pageContent = getPageContent(url);
@@ -163,7 +173,7 @@ public class Crawler implements Runnable {
                     NoOfAddedPagesAlready++;
                     toBeCrawledLinks.add(normalizedUrl);
                     toBeCrawled.insertOne(new Document("url", normalizedUrl)
-                            .append("name", name).append("pageObjectId", pageObjectId));
+                            .append("name", name).append("includedLinks", 0) .append("parentPages",  Arrays.asList(pageObjectId)));
                     visitedPages.add(compactString);
                     compactStrings.insertOne(new Document("url", normalizedUrl).append("compactString", compactString));
                     System.out.println("WE JUST ADDED THIS TO THE TO BE CRAWLED LINKS" + normalizedUrl);
@@ -173,14 +183,14 @@ public class Crawler implements Runnable {
 
 
         public void fillLists() {
-            //if we got interupted we gotta get what's in the db before we start
+            //if we got interrupted  ,so we get what's in the db before we start
             BasicURLNormalizer normalizer = new BasicURLNormalizer();
             Iterator iterator = toBeCrawled.find().iterator();
             while (iterator.hasNext()) {
                 Document document = (Document) iterator.next();
                 if(document.getString("url")!=null)
                 {
-                toBeCrawledLinks.add(normalizer.filter(document.getString("url")));}
+                    toBeCrawledLinks.add(normalizer.filter(document.getString("url")));}
             }
 
             iterator = crawledAlreadyLinksDB.find().iterator();
@@ -203,7 +213,7 @@ public class Crawler implements Runnable {
             nextLink = toBeCrawledLinks.poll();
             if (nextLink != null) {
                 toBeCrawledLinks.remove(nextLink);
-                toBeCrawled.deleteOne(new Document("url", nextLink));
+
                 crawledAlreadyLinksDB.insertOne(new Document("url", nextLink));
                 crawledAlreadyLinks.add(nextLink);
                 System.out.println("WE JUST CAPTURED THIS FOR CRAWLING"+nextLink );
@@ -270,12 +280,20 @@ public class Crawler implements Runnable {
                 Elements linksOnPage = linkDoc.select("a[href]");
 
                 // process links on the page
+                Document toBeCrawledDoc = mongoDBHandler.toBeCrawled.find(new Document("url", URL)).first();
+
+                int linkCount = toBeCrawledDoc.getInteger("includedLinks", 0);
+
                 for (Element page : linksOnPage) {
 
+                    synchronized (lock) {
+                        linkCount++;
+                        mongoDBHandler.toBeCrawled.updateOne(new Document("url", URL), new Document("$set", new Document("includedLinks", linkCount)));
+                    }
                     String url = page.attr("abs:href");
-                    String normalizedUrl = normalizer.filter(url);
 
-                    if (url.contains("http") && !crawledAlreadyHashMap.containsKey(normalizedUrl)&&url!=null) {
+
+                    if (url.contains("http") &&url!=null) {
                         if (NoOfAddedPagesAlready < NoOfCrawledPagesMax) {
                             mongoDBHandler.addToToBeCrawledLinks(url, websiteName,pageObjectId);
 
@@ -287,9 +305,8 @@ public class Crawler implements Runnable {
 
                     }
                 }
-
             } catch (IOException | URISyntaxException e) {
-                // handle the exception
+                e.printStackTrace();
             }
         }
     }
@@ -329,10 +346,9 @@ public class Crawler implements Runnable {
         return rules.isAllowed(url);
     }
     public void run() {
-        HandleMongoDB mongoDBHandler = new HandleMongoDB();
 
         crawl();
-       // mongoDBHandler.setState(1,NoOfAddedPagesAlready);
+
         synchronized (lock) {
             numThreadsFinished++;
         }
@@ -343,11 +359,11 @@ public class Crawler implements Runnable {
         int state = mongoDBHandler.getState();
         NoOfAddedPagesAlready=mongoDBHandler.getPagesAdded();
         if (state==0) {
-            System.out.println("WE ARE FILLING THE SEADSET DE AWEL RUN ASLAHA");
+            System.out.println("WE ARE FILLING THE SEAD SET DE FIRST RUN ");
             mongoDBHandler.fillSeedSet();
         }
         else{
-            System.out.println("WE ARE FILLING THE LISTS AFTER BEING INTERUPTED");
+            System.out.println("WE ARE FILLING THE LISTS AFTER BEING INTERRUPTED");
             mongoDBHandler.fillLists();
         }
 
@@ -376,10 +392,8 @@ public class Crawler implements Runnable {
         }
         //mongoDBHandler.setState(1);
         System.out.println("Done crawling!");
-    }
+}
 
 
 
 }
-
-

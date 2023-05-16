@@ -1,3 +1,2 @@
 dependencies {
-    implementation group: 'com.github.crawler-commons', name: 'crawler-commons', version: '1.2'
 }

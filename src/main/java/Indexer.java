@@ -1,4 +1,4 @@
-//package main.java;
+/*//package main.java;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
@@ -166,4 +166,4 @@ public class Indexer {
         }
     }
 
-}
+}*/
