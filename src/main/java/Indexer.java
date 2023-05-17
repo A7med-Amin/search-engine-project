@@ -1,4 +1,4 @@
-/*//package main.java;
+//package main.java;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -17,6 +17,8 @@ import java.util.*;
 import java.util.regex.Pattern;
 import java.util.regex.Matcher;
 
+import org.javatuples.Triplet;
+
 public class Indexer {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////                               Variables                                                     ////////////
@@ -28,8 +30,6 @@ public class Indexer {
     public static List<String> stopWords;
     // List of actual Elements that has no child in tags
     public static List<Element> actualElements;
-    // List of all words exists in 1 document
-//    public static List<String> words;
     // HashMap that contains entry to DB
     public static HashMap<String, Word> dbEntries = new HashMap<>();
     // Documents to be added into DB
@@ -78,14 +78,19 @@ public class Indexer {
 
     // Function get all elements in html document then exclude elements with children
     public static void getElementsWithoutChildren(org.jsoup.nodes.Document document) {
+        if (document == null) {
+            return;
+        }
+        Elements elements = document.getAllElements();
         actualElements = new ArrayList<>();
-        // Get all elements <tags> in doc
-        Elements elements = document.select("*");
+
         // Remove elements that contain children
         for (Element element : elements) {
-            if (element.children().isEmpty()) {
+            String text = element.text();
+            String tag = element.tagName();
+            if (tag == "title" || tag == "h1" || tag == "h2" || tag == "h3" || tag == "h4" || tag == "h5" || tag == "h6" || tag == "p" || tag == "td" || tag == "li") {
                 // add only tags that has text in it and ignore empty tags
-                if (!element.text().isEmpty()) {
+                if (!text.isEmpty()) {
                     actualElements.add(element);
                 }
             }
@@ -93,8 +98,10 @@ public class Indexer {
     }
 
     // Function that get all words in a doc
-    public static void getDocWords(HashMap<String, String> words) {
-//        words = new ArrayList<String>();
+    public static void getDocWords(List<Triplet<String, String, Integer>> words) {
+
+        // Position of word in the doc
+        Integer pos = 0;
         for (Element element : actualElements) {
             // Get element text as string
             String elementStr = element.text();
@@ -108,7 +115,8 @@ public class Indexer {
 
             // Add these fine words now to list of words
             for (String str : allDocWords) {
-                words.put(str, elementStr);
+                words.add(Triplet.with(str, elementStr, pos));
+                ++pos;
             }
         }
     }
@@ -120,17 +128,16 @@ public class Indexer {
     }
 
     // Insert doc words into hash map
-    public static void insertWordsToHashMap(HashMap<String, String> words, Document doc) {
+    public static void insertWordsToHashMap(List<Triplet<String, String, Integer>> words, Document doc) {
         // Loop on words of the document and Put in hash-map
-        Integer i = 0;
-        for (Map.Entry<String, String> x : words.entrySet()) {
+        for (Triplet x : words) {
             // New word not exist in DB before
-            if (!dbEntries.containsKey(x.getKey())) {
+            if (!dbEntries.containsKey(x.getValue0())) {
                 Word wordInDoc = new Word();
                 Doc wordDocs = new Doc();
 
                 // insert in Word class
-                wordInDoc.word = (x.getKey());
+                wordInDoc.word = (x.getValue0().toString());
                 ++wordInDoc.df;
 
                 // insert to Doc class
@@ -138,25 +145,25 @@ public class Indexer {
                 wordDocs.docLink = doc.getString("url");
                 wordDocs.docLength = words.size();
                 ++wordDocs.tf;
-                wordDocs.positions.add(i);
-                wordDocs.firstOccurrence = x.getValue();
+                wordDocs.positions.add((Integer) x.getValue2());
+                wordDocs.firstOccurrence = x.getValue1().toString();
                 wordInDoc.wordDocs.add(wordDocs);
-                dbEntries.put(x.getKey(), wordInDoc);
+                dbEntries.put(x.getValue0().toString(), wordInDoc);
 
             }
             // word exists in DB before
             else {
                 boolean urlFound = false;
-                Word wordInDoc = dbEntries.get(x.getKey());
+                Word wordInDoc = dbEntries.get(x.getValue0().toString());
                 List<Doc> wordDocsList = wordInDoc.wordDocs;
                 for (Doc document : wordDocsList) {
                     // word found in a doc exist in it before
                     if (document.docId.equals(doc.getObjectId("_id").toString())) {
                         urlFound = true;
                         ++document.tf;
-                        document.positions.add(i);
+                        document.positions.add((Integer) x.getValue2());
                         wordInDoc.wordDocs = wordDocsList;
-                        dbEntries.put(x.getKey(), wordInDoc);
+                        dbEntries.put(x.getValue0().toString(), wordInDoc);
                         break;
                     }
                 }
@@ -168,15 +175,13 @@ public class Indexer {
                     wordDocs.docId = doc.getObjectId("_id").toString();
                     wordDocs.docLink = doc.getString("url");
                     wordDocs.docLength = words.size();
-                    wordDocs.positions.add(i);
-                    wordDocs.firstOccurrence = x.getValue();
+                    wordDocs.positions.add((Integer) x.getValue2());
+                    wordDocs.firstOccurrence = x.getValue1().toString();
                     wordInDoc.wordDocs.add(wordDocs);
-                    dbEntries.put(x.getKey(), wordInDoc);
+                    dbEntries.put(x.getValue0().toString(), wordInDoc);
                 }
             }
-            ++i;
         }
-
     }
 
     // Convert the hash-map into Document
@@ -224,16 +229,18 @@ public class Indexer {
         readCrawledLinks();
 
         // Loop on all docs in list of docs that is already crawled and index words in each doc
-//        for (int i = 0; i < toBeCrawledDocs.size(); i++) {
-        for (int i = 0; i < 5; i++) {
-
+        for (int i = 0; i < toBeCrawledDocs.size(); i++) {
+//        for (int i = 0; i < 1; i++) {
             System.out.println(i);
             System.out.println(toBeCrawledDocs.get(i).getObjectId("_id").toString());
             System.out.println(toBeCrawledDocs.get(i).getString("url"));
 
             // List contains all words of a document in first place of hash-map
-            // List first occurrence of each word
-            HashMap<String, String> words = new HashMap<>();
+            // Each Entry in List:
+            //              word
+            //              first occurrence of each word
+            //              position
+            List<Triplet<String, String, Integer>> words = new ArrayList<>();
 
             // Get the document html elements
             org.jsoup.nodes.Document document;
@@ -245,20 +252,16 @@ public class Indexer {
                 getDocWords(words);
                 // Get data to be added to hash map entry
                 insertWordsToHashMap(words, toBeCrawledDocs.get(i));
-                // Convert the hashmap into Document
-                convertMapToDoc();
                 // Clear data after finishing a document
-                if (i != 4) {
-                    actualElements.clear();
-                    dbDocuments.clear();
-                }
+                actualElements.clear();
             } catch (IOException e) {
                 e.printStackTrace();
                 System.out.println("This link Fails");
             }
         }
+        // Convert the hashmap into Document
+        convertMapToDoc();
         // Insert to DB
         mongoDBHandler.insertWordsIntoDb(dbDocuments);
     }
-
-}*/
+}

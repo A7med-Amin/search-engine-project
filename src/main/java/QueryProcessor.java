@@ -60,6 +60,10 @@ public class QueryProcessor {
 
     // Function that process query words to match that saved by indexer
     public static List<String> getQueryWords(String query) {
+//        if()
+//        {
+//            return ;
+//        }
         List<String> words = new ArrayList<>();
         // Get all words in the query (including stop words)
         // Convert words into lowercase to match stop words
