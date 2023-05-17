@@ -148,7 +148,7 @@ public class Indexer implements Runnable {
                 wordDocs.docLink = doc.getString("url");
                 wordDocs.docLength = words.size();
                 ++wordDocs.tf;
-                wordDocs.positions.add((Integer) x.getValue2());
+                wordDocs.positions.add((int) x.getValue2());
                 wordDocs.firstOccurrence = x.getValue1().toString();
                 wordInDoc.wordDocs.add(wordDocs);
                 dbEntries.put(x.getValue0().toString(), wordInDoc);
@@ -164,7 +164,7 @@ public class Indexer implements Runnable {
                     if (document.docId.equals(doc.getObjectId("_id").toString())) {
                         urlFound = true;
                         ++document.tf;
-                        document.positions.add((Integer) x.getValue2());
+                        document.positions.add((int) x.getValue2());
                         wordInDoc.wordDocs = wordDocsList;
                         dbEntries.put(x.getValue0().toString(), wordInDoc);
                         break;
@@ -178,7 +178,7 @@ public class Indexer implements Runnable {
                     wordDocs.docId = doc.getObjectId("_id").toString();
                     wordDocs.docLink = doc.getString("url");
                     wordDocs.docLength = words.size();
-                    wordDocs.positions.add((Integer) x.getValue2());
+                    wordDocs.positions.add((int) x.getValue2());
                     wordDocs.firstOccurrence = x.getValue1().toString();
                     wordInDoc.wordDocs.add(wordDocs);
                     dbEntries.put(x.getValue0().toString(), wordInDoc);
@@ -203,13 +203,7 @@ public class Indexer implements Runnable {
                 docsListData.put("doc_length", docs.docLength);
                 docsListData.put("tf", docs.tf);
                 docsListData.put("first_occurrence", docs.firstOccurrence);
-                docsListData.put("positions", new ArrayList<>());
-
-                for (Integer pos : docs.positions) {
-                    Document positions = new Document();
-                    positions.put("position ", pos);
-                    docsListData.getList("positions", Document.class).add(positions);
-                }
+                docsListData.put("positions", docs.positions);
                 entryDoc.getList("documents", Document.class).add(docsListData);
             }
             dbDocuments.add(entryDoc);
@@ -220,8 +214,8 @@ public class Indexer implements Runnable {
     public static void indexing() {
         // Loop on all docs in list of docs that is already crawled and index words in each doc
         int threadIndex = Integer.parseInt(Thread.currentThread().getName());
-        int chunk = (toBeCrawledDocs.size() / numThreads);
-        int remainder = (toBeCrawledDocs.size() % numThreads);
+        int chunk = ((toBeCrawledDocs.size() - 5850) / numThreads);
+        int remainder = ((toBeCrawledDocs.size() - 5850) % numThreads);
         int start = threadIndex * chunk;
         int end = start + chunk;
         if (threadIndex == numThreads - 1) {
