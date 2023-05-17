@@ -60,11 +60,13 @@ public class QueryProcessor {
 
     // Function that process query words to match that saved by indexer
     public static List<String> getQueryWords(String query) {
-//        if()
-//        {
-//            return ;
-//        }
         List<String> words = new ArrayList<>();
+        // Read Stop words
+        try {
+            readStopWordsFromFile();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
         // Get all words in the query (including stop words)
         // Convert words into lowercase to match stop words
         List<String> queryWords = splitToWords(query.toLowerCase());
@@ -79,6 +81,14 @@ public class QueryProcessor {
         }
         return words;
     }
+
+//    public static void main(String[] args) throws IOException {
+//        String query = "\"This tennis player is good enough to play for our team.\"";
+//        List<String> output = getQueryWords(query);
+//        for (String str : output) {
+//            System.out.println(str);
+//        }
+//    }
 
 //    // Convert the List<String> into Document
 //    public static void convertMapToDoc(List<String> words) {
