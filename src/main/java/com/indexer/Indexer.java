@@ -1,4 +1,4 @@
-//package main.java;
+package com.indexer;//package main.java;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -16,7 +16,8 @@ import java.io.*;
 import java.util.*;
 import java.util.regex.Pattern;
 import java.util.regex.Matcher;
-
+import com.database.objects.Word;
+import com.database.objects.Doc;
 import org.javatuples.Triplet;
 
 public class Indexer implements Runnable {
@@ -149,11 +150,11 @@ public class Indexer implements Runnable {
                 Word wordInDoc = new Word();
                 Doc wordDocs = new Doc();
 
-                // insert in Word class
+                // insert in com.database.objects.Word class
                 wordInDoc.word = (x.getValue0().toString());
                 ++wordInDoc.df;
 
-                // insert to Doc class
+                // insert to com.database.objects.Doc class
                 wordDocs.docId = doc.getObjectId("_id").toString();
                 wordDocs.docLink = doc.getString("url");
                 wordDocs.docLength = words.size();
@@ -180,7 +181,7 @@ public class Indexer implements Runnable {
                         break;
                     }
                 }
-                // Word is in DB but in different docs
+                // com.database.objects.Word is in DB but in different docs
                 if (!urlFound) {
                     Doc wordDocs = new Doc();
                     ++wordInDoc.df;
@@ -279,7 +280,7 @@ public class Indexer implements Runnable {
 ////////////                                 Main Function                                               ////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    public static void main(String[] args) throws IOException {
+    public static void main() throws IOException {
 
         // DB object to access the mongoDB from it
         HandleMongoDB mongoDBHandler = new HandleMongoDB();

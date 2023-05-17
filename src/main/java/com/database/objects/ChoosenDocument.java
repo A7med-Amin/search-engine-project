@@ -9,6 +9,7 @@ public class ChoosenDocument {
     public double TF;
     public double IDF;
     public double TF_IDF;
+    public String url;
     public Vector<Pair<String,int[]>> availableWords;
     
     public ChoosenDocument() {
@@ -46,7 +47,7 @@ public class ChoosenDocument {
     }
     @Override
     public String toString() {
-        System.out.println("ChoosenDocument{" + "id='" + id + '\'' + ", TF=" + TF + ", IDF=" + IDF + ", TF_IDF=" + TF_IDF + '}');
+        System.out.println("ChoosenDocument{ " + "id='" + id + '\'' + ", TF=" + TF + ", IDF=" + IDF + ", TF_IDF=" + TF_IDF + " " + "url= " + url + '}');
         return "ChoosenDocument{" + "id='" + id + '\'' + ", TF=" + TF + ", IDF=" + IDF + ", TF_IDF=" + TF_IDF + '}';
     }
 }

@@ -1,3 +1,5 @@
+package com.query_processor;
+
 import org.tartarus.snowball.ext.porterStemmer;
 
 import java.io.BufferedReader;
