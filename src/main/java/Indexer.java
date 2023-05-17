@@ -92,7 +92,7 @@ public class Indexer implements Runnable {
         for (Element element : elements) {
             String text = element.text();
             String tag = element.tagName();
-            if (tag == "title" || tag == "h1" || tag == "h2" || tag == "h3" || tag == "h4" || tag == "h5" || tag == "h6" || tag == "p" || tag == "td" || tag == "li") {
+            if ((element.children().isEmpty()) && (tag.equals("span") || tag.equals("title") || tag.equals("h1") || tag.equals("h2") || tag.equals("h3") || tag.equals("h4") || tag.equals("h5") || tag.equals("h6") || tag.equals("p") || tag.equals("td") || tag.equals("th") || tag.equals("li"))) {
                 // add only tags that has text in it and ignore empty tags
                 if (!text.isEmpty()) {
                     actualElements.add(element);
@@ -303,10 +303,12 @@ public class Indexer implements Runnable {
             }
         }
 
-        System.out.println("Finished");
-
         // Convert the hashmap into Document
         convertMapToDoc();
+
+        System.out.println(dbDocuments.size());
+        System.out.println("Finished");
+
         // Insert to DB
         mongoDBHandler.insertWordsIntoDb(dbDocuments);
     }
