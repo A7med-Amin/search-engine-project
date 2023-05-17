@@ -1,3 +1,5 @@
+package com.webcrawler;
+
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
@@ -21,8 +23,6 @@ import org.bson.Document;
 import com.mongodb.*;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.MongoCollection;
-import com.mongodb.client.model.Updates;
-import com.mongodb.client.model.UpdateOptions;
 import crawlercommons.filters.basic.BasicURLNormalizer;
 import java.io.*;
 import java.util.*;
@@ -378,7 +378,7 @@ try {
         }
     }
 
-    public static void main(String[] args) {
+    public static void main() {
         HandleMongoDB mongoDBHandler = new HandleMongoDB();
         int state = mongoDBHandler.getState();
         NoOfAddedPagesAlready=mongoDBHandler.getPagesAdded();

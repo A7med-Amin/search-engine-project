@@ -1,3 +1,5 @@
+package com.indexer;
+
 import com.mongodb.BasicDBList;
 import com.mongodb.MongoClient;
 import com.mongodb.MongoClientURI;
