@@ -19,17 +19,22 @@ import java.util.regex.Matcher;
 
 import org.javatuples.Triplet;
 
-public class Indexer {
+public class Indexer implements Runnable {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////                               Variables                                                     ////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    // Number of threads
+    static int numThreads = 10;
+    // Finished Threads
+    static int numThreadsFinished = 0;
+    // Mutex to lock with it
+    static Object lock = new Object();
 
     // Links & Ids of docs that is crawled already and saved in DB
     static List<Document> toBeCrawledDocs = new ArrayList<>();
     // List of stop words to be excluded from indexer DB
     public static List<String> stopWords;
-    // List of actual Elements that has no child in tags
-    public static List<Element> actualElements;
     // HashMap that contains entry to DB
     public static HashMap<String, Word> dbEntries = new HashMap<>();
     // Documents to be added into DB
@@ -77,12 +82,11 @@ public class Indexer {
     }
 
     // Function get all elements in html document then exclude elements with children
-    public static void getElementsWithoutChildren(org.jsoup.nodes.Document document) {
+    public static void getElementsWithoutChildren(org.jsoup.nodes.Document document, List<Element> actualElements) {
         if (document == null) {
             return;
         }
         Elements elements = document.getAllElements();
-        actualElements = new ArrayList<>();
 
         // Remove elements that contain children
         for (Element element : elements) {
@@ -98,8 +102,7 @@ public class Indexer {
     }
 
     // Function that get all words in a doc
-    public static void getDocWords(List<Triplet<String, String, Integer>> words) {
-
+    public static void getDocWords(List<Triplet<String, String, Integer>> words, List<Element> actualElements) {
         // Position of word in the doc
         Integer pos = 0;
         for (Element element : actualElements) {
@@ -213,6 +216,61 @@ public class Indexer {
         }
     }
 
+    // Function index which is executed by each thread
+    public static void indexing() {
+        // Loop on all docs in list of docs that is already crawled and index words in each doc
+        int threadIndex = Integer.parseInt(Thread.currentThread().getName());
+        int chunk = (toBeCrawledDocs.size() / numThreads);
+        int remainder = (toBeCrawledDocs.size() % numThreads);
+        int start = threadIndex * chunk;
+        int end = start + chunk;
+        if (threadIndex == numThreads - 1) {
+            end += remainder;
+        }
+
+        for (int i = start; i < end; i++) {
+            System.out.println(i);
+            System.out.println(toBeCrawledDocs.get(i).getObjectId("_id").toString());
+            System.out.println(toBeCrawledDocs.get(i).getString("url"));
+
+            // List contains all words of a document in first place of hash-map
+            // Each Entry in List:
+            //              word
+            //              first occurrence of each word
+            //              position
+            List<Triplet<String, String, Integer>> words = new ArrayList<>();
+
+            // List of actual Elements that has no child in tags
+            List<Element> actualElements = new ArrayList<>();
+
+            // Get the document html elements
+            org.jsoup.nodes.Document document;
+            try {
+                document = Jsoup.connect(toBeCrawledDocs.get(i).getString("url")).get();
+                // Get actual elements that have no children
+                getElementsWithoutChildren(document, actualElements);
+                // Get doc words after remove stop words / stemming / convert to lower-case
+                getDocWords(words, actualElements);
+                // Get data to be added to hash map entry
+                synchronized (lock) {
+                    insertWordsToHashMap(words, toBeCrawledDocs.get(i));
+                }
+
+            } catch (IOException e) {
+                e.printStackTrace();
+                System.out.println("This link Fails");
+            }
+        }
+    }
+
+    // Run function to be executed by each thread
+    public void run() {
+        indexing();
+        synchronized (lock) {
+            numThreadsFinished++;
+        }
+    }
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////                                 Main Function                                               ////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -228,37 +286,25 @@ public class Indexer {
         // Get all crawled docs data {id & url} form mongoDB and save it in list of docs
         readCrawledLinks();
 
-        // Loop on all docs in list of docs that is already crawled and index words in each doc
-        for (int i = 0; i < toBeCrawledDocs.size(); i++) {
-//        for (int i = 0; i < 1; i++) {
-            System.out.println(i);
-            System.out.println(toBeCrawledDocs.get(i).getObjectId("_id").toString());
-            System.out.println(toBeCrawledDocs.get(i).getString("url"));
+        // Start threads
+        Thread[] threads = new Thread[numThreads];
+        for (int i = 0; i < numThreads; i++) {
+            threads[i] = new Thread(new Indexer());
+            threads[i].setName(String.valueOf(i));
+            threads[i].start();
+        }
 
-            // List contains all words of a document in first place of hash-map
-            // Each Entry in List:
-            //              word
-            //              first occurrence of each word
-            //              position
-            List<Triplet<String, String, Integer>> words = new ArrayList<>();
-
-            // Get the document html elements
-            org.jsoup.nodes.Document document;
+        // Wait for all threads to finish their work
+        for (int i = 0; i < numThreads; i++) {
             try {
-                document = Jsoup.connect(toBeCrawledDocs.get(i).getString("url")).get();
-                // Get actual elements that have no children
-                getElementsWithoutChildren(document);
-                // Get doc words after remove stop words / stemming / convert to lower-case
-                getDocWords(words);
-                // Get data to be added to hash map entry
-                insertWordsToHashMap(words, toBeCrawledDocs.get(i));
-                // Clear data after finishing a document
-                actualElements.clear();
-            } catch (IOException e) {
+                threads[i].join();
+            } catch (InterruptedException e) {
                 e.printStackTrace();
-                System.out.println("This link Fails");
             }
         }
+
+        System.out.println("Finished");
+
         // Convert the hashmap into Document
         convertMapToDoc();
         // Insert to DB
