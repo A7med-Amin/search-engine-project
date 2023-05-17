@@ -105,9 +105,18 @@ public class Indexer implements Runnable {
     public static void getDocWords(List<Triplet<String, String, Integer>> words, List<Element> actualElements) {
         // Position of word in the doc
         Integer pos = 0;
+        Integer i = 0;
         for (Element element : actualElements) {
             // Get element text as string
-            String elementStr = element.text();
+            String elementStr;
+            if (i == 0) {
+                elementStr = element.text();
+            } else if (i == actualElements.size() - 1) {
+                elementStr = element.text() + actualElements.get(i - 1).text();
+            } else {
+                elementStr = element.text() + actualElements.get(i - 1).text() + actualElements.get(i + 1).text();
+            }
+
             // Get all words in the doc (including stop words)
             // Convert words into lowercase to match stop words
             List<String> allDocWords = splitToWords(elementStr.toLowerCase());
@@ -121,6 +130,7 @@ public class Indexer implements Runnable {
                 words.add(Triplet.with(str, elementStr, pos));
                 ++pos;
             }
+            ++i;
         }
     }
 
@@ -214,8 +224,8 @@ public class Indexer implements Runnable {
     public static void indexing() {
         // Loop on all docs in list of docs that is already crawled and index words in each doc
         int threadIndex = Integer.parseInt(Thread.currentThread().getName());
-        int chunk = ((toBeCrawledDocs.size() - 5850) / numThreads);
-        int remainder = ((toBeCrawledDocs.size() - 5850) % numThreads);
+        int chunk = ((toBeCrawledDocs.size()) / numThreads);
+        int remainder = ((toBeCrawledDocs.size()) % numThreads);
         int start = threadIndex * chunk;
         int end = start + chunk;
         if (threadIndex == numThreads - 1) {
