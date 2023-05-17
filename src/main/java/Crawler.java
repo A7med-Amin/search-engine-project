@@ -164,7 +164,16 @@ public class Crawler implements Runnable {
                     }
                     return;
                 }
-                if (url.contains("http") && !toBeCrawledLinks.contains(normalizedUrl)&& !crawledAlreadyHashMap.containsKey(normalizedUrl)) {
+                boolean urlAlreadyExists = false;
+                Iterator iterator = toBeCrawled.find().iterator();
+                while (iterator.hasNext()) {
+                    Document document = (Document) iterator.next();
+                    if (document.getString("url") ==normalizedUrl) {
+                        urlAlreadyExists=true;
+                    }
+                }
+
+                if (!urlAlreadyExists &&url.contains("http") && !toBeCrawledLinks.contains(normalizedUrl)&& !crawledAlreadyHashMap.containsKey(normalizedUrl)) {
                     // Generate compact string from page content
                     String pageContent = null;
                     pageContent = getPageContent(url);
