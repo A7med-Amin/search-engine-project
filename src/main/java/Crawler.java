@@ -71,8 +71,15 @@ public class Crawler implements Runnable {
                             org.jsoup.nodes.Document linkDoc = Jsoup.connect(urlData).get();
                             String websiteName = linkDoc.title().split(" - ")[0];
 
-                            String ObjectID=getObjectIdForURL(urlData);
-                            addToToBeCrawledLinks(urlData,websiteName,ObjectID);
+
+                            String pageContent = null;
+                            pageContent = getPageContent(urlData);
+                            if(pageContent==null)
+                            {
+                                return;
+                            }
+                            String compactString = generateCompactString(pageContent);
+                            addToToBeCrawledLinks(urlData,websiteName,null);
 
                         } catch (IOException e) {
                             // handle the exception
@@ -139,16 +146,20 @@ public class Crawler implements Runnable {
             if (url != null) {
                 BasicURLNormalizer normalizer = new BasicURLNormalizer();
                 String normalizedUrl = normalizer.filter(url);
-
-                // Remove "www." if it exists in the URL
                 normalizedUrl = normalizedUrl.replaceFirst("www.", "");
+                String normalizedpageObjectId=null;
+                if(pageObjectId!=null) {
+                    normalizedpageObjectId = normalizer.filter(pageObjectId);
+                    // Remove "www." if it exists in the URL
+                    normalizedpageObjectId = normalizedpageObjectId.replaceFirst("www.", "");
+                }
                 if (toBeCrawledLinks.contains(normalizedUrl)) {
                     // Update the existing document to add the pageObjectId to the parentPages array
                     Document toBeCrawledDoc = toBeCrawled.find(new Document("url", normalizedUrl)).first();
                     List<String> parentPages = toBeCrawledDoc.getList("parentPages", String.class);
                     if (!parentPages.contains(pageObjectId)) {
                         synchronized (lock) {
-                            toBeCrawled.updateOne(new Document("url", normalizedUrl), new Document("$push", new Document("parentPages", pageObjectId)));
+                            toBeCrawled.updateOne(new Document("url", normalizedUrl), new Document("$push", new Document("parentPages", normalizedpageObjectId)));
                         }
                     }
                     return;
@@ -176,7 +187,7 @@ public class Crawler implements Runnable {
                             .append("name", name)
                             .append("includedLinks", 0)
                             .append("id", compactString)
-                            .append("parentPages", Arrays.asList(pageObjectId))
+                            .append("parentPages", Arrays.asList(normalizedpageObjectId))
                             .append("pop", 1.0f/6000));
                     visitedPages.add(compactString);
                     compactStrings.insertOne(new Document("url", normalizedUrl).append("compactString", compactString));
@@ -302,7 +313,7 @@ public class Crawler implements Runnable {
 
                     if (url.contains("http") &&url!=null) {
                         if (NoOfAddedPagesAlready < NoOfCrawledPagesMax) {
-                            mongoDBHandler.addToToBeCrawledLinks(url, websiteName,compactString);
+                            mongoDBHandler.addToToBeCrawledLinks(url, websiteName,URL);
 
                             System.out.println(NoOfAddedPagesAlready);
                         }
