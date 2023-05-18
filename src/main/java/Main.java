@@ -51,7 +51,7 @@ public class Main {
              System.out.println("(2) Start Indexing " );
              String input2 = scanner.next();
              if (input2.equals("1"))
-                crawler.main();
+                ranker.populairty();
             else if (input2.equals("2"))
                 indexer.main();
          }

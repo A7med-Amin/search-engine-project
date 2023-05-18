@@ -65,5 +65,10 @@ public class Popularity {
     }
     
     
-    
+    //create main function to test
+    public static void main(String[] args) {
+        Popularity popularity = new Popularity(null, null, null);
+        
+        popularity.popularityRanking();
+    }
 }

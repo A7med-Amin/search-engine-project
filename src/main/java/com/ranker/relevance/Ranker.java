@@ -19,6 +19,10 @@ import java.io.IOException;
 import java.util.*;
 import java.util.Arrays;
 
+import java.util.Comparator;
+import java.util.Vector;
+import java.util.Collections;
+
 public class Ranker {
     private MongoClient mongoClient;
     private MongoDatabase db;
@@ -28,7 +32,7 @@ public class Ranker {
     public Ranker() {
         this.mongoClient = new MongoClient(new MongoClientURI("mongodb+srv://Ahmed:n5XPwrcZ3ELSDoJ3@cluster0.oykbykb.mongodb.net"));
         this.db = mongoClient.getDatabase("SampleDB");
-        this.mockDB = db.getCollection("wordsIndices");
+        this.mockDB = db.getCollection("toBeCrawled");
     }
     
     public void relevanceDetector(String query) {
@@ -54,6 +58,7 @@ public class Ranker {
                 DocumentChoosen.setTF(N_TF);
                 DocumentChoosen.setIDF(IDF);
                 DocumentChoosen.setTF_IDF(TF_IDF);
+                
     
     
                 output.AddDoucment(DocumentChoosen);
@@ -61,6 +66,11 @@ public class Ranker {
             
         }
     
+        Collections.sort(output.choosenDocuments, new Comparator<ChoosenDocument>() {
+            public int compare(ChoosenDocument obj1, ChoosenDocument obj2) {
+                return Double.compare(obj1.getIDF(), obj2.getIDF());
+            }
+        });
         output.toString();
     }
     
@@ -170,7 +180,6 @@ public class Ranker {
     
     public void populairty() {
         //Getting the number of documents in the database
-        long dataBaseSize = mockDB.countDocuments();
         // Initiating the treemap that will hold the database items
         TreeMap<String, DocumentSource> treeMap_i = new TreeMap<>();
         TreeMap<String, DocumentSource> treeMap_ii = new TreeMap<>();
@@ -179,16 +188,17 @@ public class Ranker {
         //mockDB.updateMany(new Document(), update);
         
         //looping on the number of the documents in the database and store them in the treemap "i"
-        for (Document document : mockDB.find().limit(6001)) {
+        for (Document document : mockDB.find().limit(6000)) {
             Gson gson = new Gson();
             CrawledItem Crawled = gson.fromJson(document.toJson(), CrawledItem.class);
             DocumentSource DocumentSource = new DocumentSource(Crawled.parentPages, Crawled.includedLinks, Crawled.pop);
             //get the treemap full of entries
+            System.out.println(Crawled.url);
             treeMap_i.put(Crawled.url, DocumentSource);
         }
         
         //number of iterations to be done
-        for (int l = 0; l < 10; l++) {
+       
             //looping on the number of the documents in the database and store them in the treemap "ii"
             for (String key : treeMap_i.keySet()) {
                 //Do calculations for each document
@@ -198,6 +208,7 @@ public class Ranker {
                 if (parentPages[0] == null) treeMap_ii.put(key, treeMap_i.get(key));
                 else {
                     for (int i = 0; i < parentPages.length; i++) {
+                        System.out.println(treeMap_i.get(parentPages[i]).getPop());
                         double parentPop = treeMap_i.get(parentPages[i]).getPop();
                         int parentOutgoingLinks = treeMap_i.get(parentPages[i]).getHyperLinkCount();
                         newPopularity = newPopularity + (parentPop / parentOutgoingLinks);
@@ -206,7 +217,7 @@ public class Ranker {
                     }
                 }
             }
-        }
+        
     }
     
     public static void main(String[] args) {
