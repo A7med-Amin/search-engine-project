@@ -3,11 +3,6 @@
 
 
 ## Team_Members
-####   1. Marwan Mostafa
-####   2. Anas Sherif
-####   3. Yasmine Hashem
-####   4. Ahmed Amin
-
 | Name    |
 | ------  |
 | Ahmed Amin  |
