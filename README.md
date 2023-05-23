@@ -11,7 +11,7 @@
 | Anas Sherif|
 
 ## Project_Description
-Based search engine that demonstrates the main features of a seaerch engine (web crawling, indexing, ranking) and interaction between them.
+Based search engine that demonstrates the main features of a search engine (web crawling, indexing, ranking) and interaction between them.
 project is mainly developed in java with react.js for web interface and spring boot.
 
 ## Web crawler
