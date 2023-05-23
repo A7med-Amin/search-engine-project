@@ -1,5 +1,5 @@
 # Search_Engine_Project
-![Screenshot 2023-05-23 092140](https://github.com/A7med-Amin/search-engine-project/assets/80707696/d3330539-4d72-4d07-b4b0-85ad5905b9e6)
+![web_interface](https://github.com/A7med-Amin/search-engine-project/assets/80707696/41deb998-c2df-4f79-a7a0-7c3f085a6af8)
 
 
 ## Team_Members
